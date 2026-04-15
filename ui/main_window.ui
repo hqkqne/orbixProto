@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>683</width>
-    <height>427</height>
+    <height>435</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -53,37 +53,37 @@
                <number>5</number>
               </property>
               <item>
-               <widget class="QPushButton" name="pushButton">
+               <widget class="QPushButton" name="task_btn">
                 <property name="text">
                  <string>tasks</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_2">
+               <widget class="QPushButton" name="user_btn">
                 <property name="text">
                  <string>users</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_3">
+               <widget class="QPushButton" name="response_btn">
                 <property name="text">
                  <string>response</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_4">
+               <widget class="QPushButton" name="rating_btn">
                 <property name="text">
-                 <string>PushButton</string>
+                 <string>ratings</string>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButton_5">
+               <widget class="QPushButton" name="profile_btn">
                 <property name="text">
-                 <string>PushButton</string>
+                 <string>profile</string>
                 </property>
                </widget>
               </item>

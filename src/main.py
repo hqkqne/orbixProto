@@ -1,8 +1,13 @@
 import sys
 from PyQt6.QtCore import QSize,Qt
 from PyQt6.QtWidgets import (
-QApplication,QPushButton, QTextEdit, QMainWindow, QCheckBox, QTreeWidget
+QWidget,QApplication,QPushButton, QTextEdit, QMainWindow, QCheckBox, QTreeWidget
 )
+
+# class TaskWidget(QWidget):
+#     def __init__(self):
+#         super().__init__()
+#         self.ui = Ui_TaskWidget()
 
 class MainWindow(QMainWindow):
     def __init__(self):
