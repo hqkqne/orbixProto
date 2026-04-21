@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QDialog, QMessageBox
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 from ui.ui_login import Ui_Dialog as Ui_login
 from ui.ui_reg import Ui_Dialog as Ui_reg
 
@@ -21,8 +21,22 @@ class LoginDialog(QDialog, Ui_login):
         if not email or not pwd:
             QMessageBox.warning(self,"error", "login and password are required")
             return
-        # self.login_successful.emit(email)
+        self.login_successful.emit(email)
         self.accept()
 
     def show_register(self, event = None):
-        reg =
+        reg = RegDialog()
+        reg.exec()
+
+class RegDialog(QDialog, Ui_reg):
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
+        self.login_btn.clicked.connect(self.handle_register)
+
+    def handle_register(self):
+        if not self.email_edit.text().strip() or not self.password_edit.text():
+            QMessageBox.warning(self, "Error", "Заполните все поля")
+            return
+        QMessageBox.information(self, "Align", "Аккаунт создан!")
+        self.accept()

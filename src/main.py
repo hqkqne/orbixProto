@@ -1,34 +1,23 @@
 import sys
-from PyQt6.QtCore import QSize,Qt
-from PyQt6.QtWidgets import (
-QWidget,QApplication,QPushButton, QTextEdit, QMainWindow, QCheckBox, QTreeWidget
-)
+from PyQt6.QtWidgets import QApplication
+from auth_dialog import LoginDialog, RegDialog
+from main_window import MainWindow
 
-# class TaskWidget(QWidget):
-#     def __init__(self):
-#         super().__init__()
-#         self.ui = Ui_TaskWidget()
+def main():
+    app = QApplication(sys.argv)
+    BASE_URL = "http://127.0.0.1:8000"
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+    login_dlg = LoginDialog(BASE_URL)
+    reg_dlg = RegDialog(BASE_URL)
 
-        self.setWindowTitle("application")
-        self.setMinimumSize(QSize(400, 300))
-        self.setMaximumSize(QSize(800,600))
+    def on_login(token):
+        main_window = MainWindow(token, BASE_URL)
+        main_window.show()
 
-        button = QPushButton('text')
-        button.setCheckable(True)
-        button.clicked.connect(self.the_button_was_clicked)
-        button.clicked.connect(self.is_toggled)
-        self.setCentralWidget(button)
+    login_dlg.login_successful.connect(on_login)
+    login_dlg.exec()
 
-    def the_button_was_clicked(button):
-        print('Click!')
-    def is_toggled(self, checked):
-        print("click?", checked)
+    sys.exit(app.exec())
 
-app = QApplication(sys.argv)
-window = MainWindow()
-window.show()
-sys.exit(app.exec())
+if __name__ == "__main__":
+    main()
