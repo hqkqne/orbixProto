@@ -12,7 +12,6 @@ class LoginDialog(QDialog, Ui_login):
         super().__init__()
         self.setupUi(self)
         self.base_url = base_url
-        # Нет аккаунта? Зарегистрироваться
         self.reg_btn = ClickableLabel()
         self.reg_btn.setStyleSheet("color: #0078D4; text_decoration: underline;")#визуально отличимая
         self.reg_btn.setParent(self)
@@ -45,11 +44,17 @@ class LoginDialog(QDialog, Ui_login):
         token = data.get("access_token")
         if token:
             self.login_successful.emit(token)
-            self.accept()
+            self.show()
         else:
             QMessageBox.warning(self,"Error", "Не получен токен")
 
-    def  on_login_error(self, error_msg: str):
+    def on_user_logout(self):
+        self.main_window = None
+        self.show()
+        self.email_edit.clear()
+        self.password_edit.clear()
+
+    def on_login_error(self, error_msg: str):
         self.login_btn.setEnabled(True)
         self.login_btn.setText("Войти")
         QMessageBox.warning(self, "Error", f"Не удалось войти:{error_msg}")

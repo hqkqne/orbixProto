@@ -1,3 +1,5 @@
+import json
+
 from PyQt6.QtCore import QThread, pyqtSignal
 import httpx
 
@@ -9,8 +11,10 @@ class ApiWorker(QThread):
         super().__init__()
         self.method = method.upper()
         self.url = url
-        self.json_data = json_data or {}
+        self.json_data = json_data
         self.headers = headers or {}
+
+        self.finished.connect(self.deleteLater)
 
     def run(self):
         try:
@@ -39,5 +43,9 @@ class ApiWorker(QThread):
             self.error.emit(f"Error {e.response.status_code}: {error_detail}")
         except httpx.ConnectError:
             self.error.emit("Не удалось подключиться к серверу")
+        except httpx.TimeoutException:
+            self.error.emit("Превышено время ожидания ответа сервера")
+        except (json.JSONDecodeError, httpx.DecodingError):
+            self.error.emit("Сервер вернул некорректный JSON")
         except Exception as e:
             self.error.emit(str(e))
