@@ -11,7 +11,6 @@ class ApiWorker(QThread):
         self.url = url
         self.json_data = json_data or {}
         self.headers = headers or {}
-        self.is_running = True
 
     def run(self):
         try:
@@ -19,9 +18,11 @@ class ApiWorker(QThread):
                 if self.method == "GET":
                     resp = client.get(self.url, headers= self.headers)
                 elif self.method == "POST":
-                    resp = client.get(self.url, json= self.json_data, headers = self.headers)
+                    resp = client.post(self.url, json= self.json_data, headers = self.headers)
                 elif self.method == "DELETE":
-                    resp = client.get(self.url, headers= self.headers)
+                    resp = client.delete(self.url, headers= self.headers)
+                elif self.method == "PUT":
+                    resp = client.put(self.url, json = self.json_data, headers= self.headers)
                 else:
                     raise ValueError(f"Method {self.method} not supported")
 
@@ -29,6 +30,14 @@ class ApiWorker(QThread):
                 data = resp.json() if resp.content else {}
                 self.success.emit(data)
         except httpx.HTTPStatusError as e:
-            self.error.emit(f'HTTP {e.response.status_code}: {e.response.text}')
+            error_detail = ''
+            try:
+                error_data = e.response.json()
+                error_detail = error_data.get("detail", str(e))
+            except:
+                error_detail = e.response.text
+            self.error.emit(f"Error {e.response.status_code}: {error_detail}")
+        except httpx.ConnectError:
+            self.error.emit("Не удалось подключиться к серверу")
         except Exception as e:
             self.error.emit(str(e))

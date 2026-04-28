@@ -73,7 +73,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QLineEdit" name="lineEdit_2"/>
+             <widget class="QLineEdit" name="login_edit"/>
             </item>
            </layout>
           </item>
@@ -151,14 +151,14 @@
              </widget>
             </item>
             <item>
-             <widget class="QLineEdit" name="lineEdit"/>
+             <widget class="QLineEdit" name="dbl_pwd_edit"/>
             </item>
            </layout>
           </item>
          </layout>
         </item>
         <item alignment="Qt::AlignHCenter">
-         <widget class="QPushButton" name="login_btn">
+         <widget class="QPushButton" name="enter_btn">
           <property name="text">
            <string>Enter</string>
           </property>
