@@ -1,6 +1,6 @@
 import re
 from PyQt6.QtWidgets import QDialog, QMessageBox, QLabel
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from src.back_client import ApiWorker
 from ui.ui_login import Ui_Dialog as Ui_login
 from ui.ui_reg import Ui_Dialog as Ui_reg
@@ -12,9 +12,16 @@ class LoginDialog(QDialog, Ui_login):
         super().__init__()
         self.setupUi(self)
         self.base_url = base_url
-        self.reg_btn = ClickableLabel()
-        self.reg_btn.setStyleSheet("color: #0078D4; text_decoration: underline;")#визуально отличимая
+        self.main_window = None
+        self.reg_btn.setText(None)
+        self.reg_btn = ClickableLabel('Зарегистрироваться')
+        self.reg_btn.setStyleSheet("color: #0078D4; text-decoration: underline;")#визуально отличимая
+        self.reg_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.reg_btn.adjustSize()
+        self.reg_btn.move(143, 272)
         self.reg_btn.setParent(self)
+
 
         self.login_btn.clicked.connect(self.handle_login)
         self.reg_btn.clicked.connect(self.show_register)

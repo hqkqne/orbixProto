@@ -123,7 +123,7 @@ class TaskPageWidget(QWidget, TaskPage):
 
 class TaskCreateDialog(QDialog, TaskCreate):
     def __init__(self, base_url:str, headers:dict, task_data: dict = None):
-        super.__init__()
+        super().__init__()
         self.base_url = base_url
         self.headers = headers
         self.task_data = task_data
