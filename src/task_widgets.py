@@ -30,22 +30,32 @@ class TaskItemWidget(QWidget, Ui_TaskItem):
 
     def handle_edit(self):
         dialog = TaskCreateDialog(self.base_url, self.headers, self.task_data)
-        if dialog.exec():
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             updated_task = dialog.get_task_data()
             if updated_task:
-                self.task_updated.emit(updated_task)
+                self.worker = ApiWorker("PUT", f"{self.base_url}/tasks/{self.task_id}",
+                                        json_data = updated_task, headers= self.headers)
+                self.worker.success.connect(lambda _:self.task_updated.emit(updated_task))
+                self.worker.success.connect(self.accept)
+                self.worker.error.connect(lambda err: QMessageBox.critical(self, "Ошибка", f"Не удалось обновить: {err}"))
+                # self.worker.finished.connect(lambda: self)
+                self.worker.start()
 
     def handle_delete(self):
-        #через QMessageBox.question можно подтверждение
-        self.pushButton_2.setEnabled(False)
-        self.worker = ApiWorker("DELETE", f"{self.base_url}/tasks/{self.task_id}", headers = self.headers)
-        self.worker.success.connect(lambda _:self.task_deleted.emit())
-        self.worker.error.connect(self.on_delete_error)
-        self.worker.start()
+        reply =  QMessageBox.question(self, "Подтверждение", "Удалить задачу?",
+                                      QMessageBox.standardButton.Yes | QMessageBox.standardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._block_buttons(True)
+            self.worker = ApiWorker("DELETE", f"{self.base_url}/tasks/{self.task_id}", headers = self.headers)
+            self.worker.success.connect(lambda _:self.task_deleted.emit())
+            self.worker.success.connect(lambda _: self.accept)
+            self.worker.error.connect(lambda err: QMessageBox.critical(self, "Ошибка", f"Не удалось удалить: {err}"))
+            self.worker.finished.connect(lambda: self._block_buttons(False))
+            self.worker.start()
 
-    def on_delete_error(self, error_msg:str):
-        self.pushButton_2.setEnabled(True)
-        QMessageBox.critical(self, "Ошибка при удалении", error_msg)
+    def _block_buttons(self, state: bool):
+        self.pushButton.setEnabled(not state)
+        self.pushButton_2.setEnabled(not state)
 
 class TaskListItemWidget(QWidget):
     clicked = pyqtSignal()
@@ -162,27 +172,14 @@ class TaskPageWidget(QWidget, TaskPage):
 
         for task in tasks:
             item = TaskItemWidget(task, self.base_url, self.headers)
-            item.task_deleted.connect(self.load_tasks)
-            item.task_updated.connect(self.on_task_updated)
-            item.task_clicked.connect(self.on_task_details)
+            item.clicked.connect(self.on_task_details)
             self.tasks_layout.addWidget(item)
 
-    def on_task_details(self):
-
-
-    def on_task_updated(self, updated_task: dict):
-        task_id = updated_task.get("id")
-        if not task_id:
-            QMessageBox.warning(self, "Нет id", "Пользователь с таким id не найден")
-            return
-        self.create_task_btn.setEnabled(False)
-        self.create_task_btn.setText("Обновление...")
-        self.worker = ApiWorker("PUT", f'{self.base_url}/tasks/{task_id}', json_data=updated_task, headers=self.headers)
-        self.worker.success.connect(lambda _:self.load_tasks())
-        self.worker.error.connect(lambda err: QMessageBox.critical(self,"Ошибка", f"Не удалось обновить: {err}"))
-        self.worker.finished.connect(lambda: self.create_task_btn.setEnabled(True))
-        self.worker.finished.connect(lambda: self.create_task_btn.setText("Создать задачу"))
-        self.worker.start()
+    def on_task_details(self, task_data: dict):
+        dialog = TaskItemWidget(task_data, self.base_url, self.headers)
+        dialog.task_updated.connect(lambda _: self.load_tasks())
+        dialog.task_deleted.conncet(lambda _: self.load_tasks())
+        dialog.exec()
 
 class TaskCreateDialog(QDialog, TaskCreate):
     def __init__(self, base_url:str, headers:dict, task_data: dict = None):
@@ -215,4 +212,4 @@ class TaskCreateDialog(QDialog, TaskCreate):
         self.accept()
 
     def get_task_data(self):
-        return getattr(self, "task_data", None)
+        return self.task_data
