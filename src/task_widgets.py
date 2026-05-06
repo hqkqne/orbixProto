@@ -1,6 +1,8 @@
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (QWidget, QMessageBox, QVBoxLayout, QDialog,
-                             QDialogButtonBox, QFormLayout, QLineEdit, QTextEdit)
+                             QDialogButtonBox, QFormLayout, QLineEdit, QTextEdit, QLabel, QPushButton, QHBoxLayout)
+from PyQt6.QtWidgets.QWidget import layout
+
 from ui.ui_task_page import Ui_Form as TaskPage
 from ui.ui_task_create import Ui_Form as TaskCreate
 from ui.ui_TaskItem import Ui_Form as Ui_TaskItem
@@ -8,7 +10,7 @@ from back_client import ApiWorker
 
 class TaskItemWidget(QWidget, Ui_TaskItem):
     task_deleted = pyqtSignal()
-    task_updated = pyqtSignal()
+    task_updated = pyqtSignal(dict)
 
     def __init__(self, task_data: dict, base_url: str, headers: dict):
         super().__init__()
@@ -16,11 +18,11 @@ class TaskItemWidget(QWidget, Ui_TaskItem):
         self.base_url = base_url
         self.headers = headers
         self.task_id = task_data.get("id")
-        self.task_data = task_data
+        self.task_data = task_data.copy()
 
         self.label.setText(task_data.get("title", "Без названия"))
         self.label_2.setText(f"Автор: {task_data.get('author', 'Unknown')}")
-        self.label_4.setText(f'Дата: {task_data.get('created_at', 'N/A')}')
+        self.label_4.setText(f"Дата: {task_data.get('created_at', 'N/A')}")
         self.label_3.setText(task_data.get("details", "Нет описания"))
 
         self.pushButton.clicked.connect(self.handle_edit)
@@ -37,13 +39,64 @@ class TaskItemWidget(QWidget, Ui_TaskItem):
         #через QMessageBox.question можно подтверждение
         self.pushButton_2.setEnabled(False)
         self.worker = ApiWorker("DELETE", f"{self.base_url}/tasks/{self.task_id}", headers = self.headers)
-        self.worker.success.connect(lambda _:self.task_deleted.emit(self.task_id))
-        self.worker.error.connect(lambda err: QMessageBox.critical(self, "Ошибка", err))
+        self.worker.success.connect(lambda _:self.task_deleted.emit())
+        self.worker.error.connect(self.on_delete_error)
         self.worker.start()
 
-class TaskPageWidget(QWidget, TaskPage):
-    def __init__(self, base_url: str, headers: dict):
+    def on_delete_error(self, error_msg:str):
+        self.pushButton_2.setEnabled(True)
+        QMessageBox.critical(self, "Ошибка при удалении", error_msg)
+
+class TaskListItemWidget(QWidget):
+    clicked = pyqtSignal()
+
+    def __init__(self, task_data: dict, base_url: str, headers: dict):
         super().__init__()
+        self.task_data = task_data.copy()
+        self.base_url = base_url
+        self.headers = headers
+
+        # клики на карточку
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        self.setStyleSheet("""
+            TaskItemWidget {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #dee2e6;
+            }
+            TaskItemWidget:hover {
+                background-color: #e9ecef;
+                border-color: #adb5bd;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+        self.lbl_title = QLabel(task_data.get("title", "Без названия"))
+        self.lbl_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+
+        self.lbl_autor = QLabel(f"{task_data.get('author', 'Unknown')}")
+        self.lbl_autor.setStyleSheet("color: #64748b;")
+
+        self.lbl_date = QLabel(f"{task_data.get('created_at', 'N/A')[:10]}")
+        self.lbl_date.setStyleSheet('color: #64748b; margin-left: auto;')
+
+        layout.addWidget(self.lbl_title, 2)
+        layout.addWidget(self.lbl_autor, 1)
+        layout.addWidget(self.lbl_date, 1)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            child_under_cursor = self.childAt(event.pos())
+            if child_under_cursor is None or not isinstance(child_under_cursor, QPushButton):
+                self.clicked.emit(self.task_data)
+                return
+            super().mousePressEvent(event)
+
+class TaskPageWidget(QWidget, TaskPage):
+    def __init__(self, base_url: str, headers: dict, parent: QWidget = None):
+        super().__init__(parent)
         self.setupUi(self)
         self.base_url = base_url
         self.headers = headers
@@ -54,20 +107,23 @@ class TaskPageWidget(QWidget, TaskPage):
         self.tasks_layout.setSpacing(10)
         self.tasks_layout.addStretch()
 
-        self.create_task_btn.connect(self.show_create_dialog)
+        self.create_task_btn.clicked.connect(self.show_create_dialog)
+        self.load_tasks()
 
     def show_create_dialog(self):
         dialog = TaskCreateDialog(self.base_url, self.headers)
-        if dialog.exec():
+        if dialog.exec()  == QDialog.DialogCode.Accepted:
             task_data = dialog.get_task_data()
-            self.create_task(task_data)
+            if task_data:
+                self.create_task(task_data)
 
     def create_task(self, task_data: dict):
         self.create_task_btn.setEnabled(False)
+        self.create_task_btn.setText("Создание...")
         self.worker = ApiWorker("POST", f"{self.base_url}/tasks", json_data= task_data, headers= self.headers)
         self.worker.success.connect(lambda _:self.load_tasks())
         self.worker.error.connect(lambda err:QMessageBox.critical(self, "Error", f"Не удалось создать задачу:{err}"))
-        self.create_task_btn.setEnabled(True)
+        self.worker.finished.connect(lambda: self.create_task_btn.setEnabled(True))
         self.worker.start()
 
     def load_tasks(self):
@@ -88,77 +144,75 @@ class TaskPageWidget(QWidget, TaskPage):
         QMessageBox.critical(self,"Ошибка загрузки", error_msg)
 
     def clear_task(self):
-        for i in reversed(range(self.tasks_layout.count())):
-            widget = self.tasks_layout.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
+        while self.tasks_layout.count() > 0:
+            item = self.tasks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
     def render_tasks(self, task_data: dict):
         """Отображение списка задач"""
         self.create_task_btn.setEnabled(True)
-        self.create_task_btn.setText("Создать задачу")
+        # self.create_task_btn.setText("Создать задачу")
         tasks = task_data if isinstance(task_data, list) else task_data.get("tasks", [])
         if not tasks:
-            empty_label = QWidget()
-            layout = QVBoxLayout(empty_label)
-            from PyQt6.QtWidgets import QLabel
-            lbl = QLabel("Нет задач. Создайте первую задачу!")
-            lbl.setAlignment(128)  # AlignCenter
-            layout.addWidget(lbl)
+            empty_label = QLabel("Нет задач")
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.tasks_layout.addWidget(empty_label)
             return
+
         for task in tasks:
             item = TaskItemWidget(task, self.base_url, self.headers)
-            item.task_deleted.connect(self.on_task_deleted)
+            item.task_deleted.connect(self.load_tasks)
             item.task_updated.connect(self.on_task_updated)
+            item.task_clicked.connect(self.on_task_details)
             self.tasks_layout.addWidget(item)
-    def on_task_deleted(self, task_id: int):
-        """Обработчик удаления задачи"""
-        self.load_tasks()
+
+    def on_task_details(self):
+
 
     def on_task_updated(self, updated_task: dict):
         task_id = updated_task.get("id")
+        if not task_id:
+            QMessageBox.warning(self, "Нет id", "Пользователь с таким id не найден")
+            return
+        self.create_task_btn.setEnabled(False)
+        self.create_task_btn.setText("Обновление...")
         self.worker = ApiWorker("PUT", f'{self.base_url}/tasks/{task_id}', json_data=updated_task, headers=self.headers)
-        self.worker.success.connect(lambda _:self.load_tasks)
+        self.worker.success.connect(lambda _:self.load_tasks())
+        self.worker.error.connect(lambda err: QMessageBox.critical(self,"Ошибка", f"Не удалось обновить: {err}"))
+        self.worker.finished.connect(lambda: self.create_task_btn.setEnabled(True))
+        self.worker.finished.connect(lambda: self.create_task_btn.setText("Создать задачу"))
+        self.worker.start()
 
 class TaskCreateDialog(QDialog, TaskCreate):
     def __init__(self, base_url:str, headers:dict, task_data: dict = None):
         super().__init__()
+        self.setupUi(self)
         self.base_url = base_url
         self.headers = headers
         self.task_data = task_data
-        self.is_edit = task_data or not None
+        self.is_edit = task_data is not None
 
         self.setWindowTitle("Редактировать задачу" if self.is_edit else "Создать задачу")
         self.setMinimumWidth(400)
 
-        layout = QFormLayout(self)
-        self.title_edit = QLineEdit()
-        self.description_edit = QTextEdit()
-
         if self.is_edit:
-            self.title_edit.setText(task_data.get("title", ""))
-            self.description_edit.setText(task_data.get("description", ""))
-        layout.addRow("Заголовок:", self.title_edit)
-        layout.addRow("Описание:", self.description_edit)
+            self.lineEdit.setText(task_data.get("title", ''))
+            self.lineEdit_2.setText(task_data.get("description", ""))
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.standardButton.Cancel
-        )
-        buttons.accepted.connect(self.save_task)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        self.login_btn.clicked.connect(self.save_task)
+        self.login_btn.setText("Сохранить" if self.is_edit else "Создать")
 
     def save_task(self):
-        title = self.title_edit.text().strip()
-        description = self.description_edit.toPlainText().strip()
+        title = self.lineEdit.text().strip()
+        description = self.lineEdit_2.text().strip()
 
         if not title:
             QMessageBox.warning(self, "Error","Заголовок обязателен")
             return
 
-        self.task_data = {"title": title, "description": description}
+        self.task_data.update({"title": title, "description": description})
         self.accept()
 
     def get_task_data(self):
-        return self.task_data
+        return getattr(self, "task_data", None)
