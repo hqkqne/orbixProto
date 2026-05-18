@@ -138,6 +138,7 @@ class RegDialog(QDialog, Ui_reg):
         self.reject()
 
     def verify_phone(self):
+        self.hide()
         self.phone_window = PhoneVerificationWindow(self.base_url, self.email)
         self.phone_window.verification_complete.connect(self.on_phone_verified)
         self.phone_window.show()
@@ -160,9 +161,30 @@ class PhoneVerificationWindow(QWidget):
         self.resize(300, 150)
         self.base_url = base_url
         self.email = email
+        self.expected_code = None
+
+        self.setWindowFlag(self.windowFlags() | Qt.WindowType.Window)#обход модальной блокировки
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Почта подтверждена! Подтверждение телефона"))
+
+        self.mock_code = QLabel()
+        self.mock_code.setStyleSheet("color: #0d6efd; font-weight: bold; background: #e7f1ff; padding: 8px; border-radius: 4px;")
+        self.mock_code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mock_code.hide()
+        layout.addWidget(self.mock_code)
+
+        self.code_input = QLineEdit()
+        self.code_input.setPlaceholderText("Пример: 111111")
+        self.code_input.setMaxLength(6)
+        self.code_input.setInputMethodHints(Qt.InputMethodHint.ImhDigitsOnly)
+        self.code_input.returnPressed.connect(self.handle_verify)
+        layout.addWidget(self.code_input)
+
+        self.confirm_btn = QPushButton("Подтвердить")
+        self.confirm_btn.clicked.connect(self.handle_verify)
+        layout.addWidget(self.confirm_btn)
+
         self.setLayout(layout)
 
     def request_code(self):
@@ -179,18 +201,41 @@ class PhoneVerificationWindow(QWidget):
     def on_code_received(self, data:dict):
         print(f"🟢 [send-phone-code] Ответ: {data}")
         code = data.get("verification_code")
-        if not code:
-            QMessageBox.warning(self, "Ошибка", "Код не получен")
+        # if not code:
+        #     QMessageBox.warning(self, "Ошибка", "Код не получен")
+        #     return
+        if code:
+            self.expected_code = str(code)
+            self.mock_code.setText(f"Код: {self.expected_code}")
+            self.mock_code.show()
+            self.mock_code.raise_()
+            self.mock_code.activateWindow()
+        self.code_input.setFocus()
+
+    def handle_verify(self):
+        entered_code = self.code_input.text().strip()
+        if not entered_code:
+            QMessageBox.warning(self, "Ошибка", "Введите код")
             return
-        self.worker = ApiWorker("POST", f"{self.base_url}/auth/verify-phone", json_data={"email":self.email, "code":code})
+        self.confirm_btn.setEnabled(False)
+        self.confirm_btn.setText("Проверка...")
+
+        self.worker = ApiWorker("POST", f"{self.base_url}/auth/verify-phone",
+                                json_data={"email": self.email, "code": entered_code})
         self.worker.success.connect(self.on_phone_verified_success)
-        self.worker.error.connect(lambda msg: QMessageBox.warning(self, "Error", f"Код неверный или истек:{msg}"))
+        self.worker.error.connect(self.on_phone_verified_error)
         self.worker.start()
 
     def on_phone_verified_success(self):
         print("Телефон подтврежден")
         self.verification_complete.emit()
         self.close()
+    def on_phone_verified_error(self, msg: str):
+        self.confirm_btn.setEnabled(True)
+        self.confirm_btn.setText("Подтвердить")
+        QMessageBox.warning(self, "Error", f"Код неверный или истек:{msg}")
+        self.code_input.clear()
+        self.code_input.setFocus()
 
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()
