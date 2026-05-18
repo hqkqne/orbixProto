@@ -1,5 +1,6 @@
 import json
-
+import time
+import threading
 from PyQt6.QtCore import QThread, pyqtSignal
 import httpx
 
@@ -49,3 +50,45 @@ class ApiWorker(QThread):
             self.error.emit("Сервер вернул некорректный JSON")
         except Exception as e:
             self.error.emit(str(e))
+
+class EmailCheckWorker(QThread):
+    verification_success = pyqtSignal()
+    verification_failed = pyqtSignal(str)
+
+    def __init__(self, url: str, email:str, timeout: int = 60, interval: int = 3):
+        super().__init__()
+        self.url = url
+        self.email = email
+        self.timeout = timeout
+        self.interval = interval
+        self._stop_event = threading.Event()
+
+    def run(self):
+        print('непосредственно начал работать')
+        start_time = time.time()
+        with httpx.Client(timeout=5.0) as client:
+            while time.time() - start_time < self.timeout and not self._stop_event.is_set():
+                try:
+                    response = client.get(self.url, params={"email": self.email})
+                    response.raise_for_status()
+                    data = response.json()
+                    if bool(data):
+                        print("EmailCheckWorker: verified!")
+                        self.verification_success.emit()
+                        return
+                except httpx.TimeoutException:
+                    print("Polling: timeout, retrying...")
+                except httpx.ConnectError:
+                    print("Polling: connect error, retrying...")
+                except (json.JSONDecodeError, httpx.DecodingError) as e:
+                    print(f"Polling: bad JSON: {e}")
+                except httpx.HTTPStatusError as e:
+                    print(f"Polling: HTTP {e.response.status_code} - {e.response.text[:100]}")
+                except Exception as e:
+                    print(f"Polling: unexpected error: {e}")
+                self._stop_event.wait(self.interval)
+            self.verification_failed.emit("Время подтверждения истекло")
+
+    def stop(self):
+        self._stop_event.set()
+        self.wait()

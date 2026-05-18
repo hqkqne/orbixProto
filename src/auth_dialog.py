@@ -1,7 +1,7 @@
 import re
-from PyQt6.QtWidgets import QDialog, QMessageBox, QLabel
-from PyQt6.QtCore import pyqtSignal, Qt
-from src.back_client import ApiWorker
+from PyQt6.QtWidgets import QDialog, QMessageBox, QLabel, QWidget, QVBoxLayout, QLineEdit, QPushButton
+from PyQt6.QtCore import pyqtSignal, Qt, QLine
+from src.back_client import ApiWorker, EmailCheckWorker
 from ui.ui_login import Ui_Dialog as Ui_login
 from ui.ui_reg import Ui_Dialog as Ui_reg
 
@@ -75,17 +75,23 @@ class RegDialog(QDialog, Ui_reg):
         super().__init__()
         self.setupUi(self)
         self.base_url = base_url
+        self.email = None
         self.enter_btn.clicked.connect(self.handle_register)
+        self.comboBox.addItem("Заказчик", userData=1)
+        self.comboBox.addItem("Исполнитель", userData=2)
 
         # self.password_edit.setEchoMode(QDialog.EchoMode.Password)
 
     def handle_register(self):
         username = self.login_edit.text().strip()
-        email = self.email_edit.text().strip()
+        email = self.mail_edit.text().strip()
         password = self.password_edit.text().strip()
-        double_password = self.dbl_pwd_edit.text().strip()#я забыл про него. пока повесит
+        phone_number = self.phone_edit.text().strip()
 
-        if not username or not email or not password:
+        role_id = self.comboBox.currentData()
+        role = "customer" if role_id == 1 else "volunteer"
+        fields = [username, email, password, role, phone_number]
+        if not all(fields):
             QMessageBox.warning(self, "Error", "Введите все поля!")
             return
         email_regex = r"^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
@@ -94,24 +100,97 @@ class RegDialog(QDialog, Ui_reg):
             return
         self.enter_btn.setEnabled(False)
         self.enter_btn.setText("Регистрация")
-
+        self.email = email
         self.worker = ApiWorker(
             "POST",
             f"{self.base_url}/auth/register",
-            json_data={"username": username, "email": email, "password": password}
+            json_data={
+                "username": username,
+                "email": email,
+                "password": password,
+                "phone_number": phone_number,
+                "role": role
+            }
         )
         self.worker.success.connect(self.on_reg_success)
         self.worker.error.connect(self.on_reg_error)
         self.worker.start()
 
-    def on_reg_success(self, data: dict):
-        QMessageBox.information(self, "Success", "Аккаунт успешно создан")
+    def on_reg_success(self):
+        self.enter_btn.setEnabled(True)
+        QMessageBox.information(self, "Success", "Подтвердите почту")
+        self.start_email_polling()
+
+    def start_email_polling(self):
+        print("start_email_polling")
+        self.email_worker = EmailCheckWorker(
+            f"{self.base_url}/auth/verified",
+            self.email,
+            timeout=120,
+            interval=4
+        )
+        self.email_worker.verification_success.connect(self.verify_phone)
+        self.email_worker.verification_failed.connect(self.on_verification_failed)
+        self.email_worker.start()
+
+    def on_verification_failed(self, msg):
+        QMessageBox.warning(self, "Error", msg)
+        self.reject()
+
+    def verify_phone(self):
+        self.phone_window = PhoneVerificationWindow(self.base_url, self.email)
+        self.phone_window.verification_complete.connect(self.on_phone_verified)
+        self.phone_window.show()
+        self.phone_window.request_code()
+
+    def on_phone_verified(self):
+        QMessageBox.information(self, "Success", "Пользователь зарегистрирован")
         self.accept()
 
     def on_reg_error(self, error_msg:str):
         self.enter_btn.setEnabled(True)
         self.enter_btn.setText("Зарегистрироваться")
         QMessageBox.warning(self, "Error registration", f"Не удалось зарегистрироваться{error_msg}")
+
+class PhoneVerificationWindow(QWidget):
+    verification_complete = pyqtSignal()
+    def __init__(self, base_url: str, email: str):
+        super().__init__()
+        self.setWindowTitle("Верификация телефона")
+        self.resize(300, 150)
+        self.base_url = base_url
+        self.email = email
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Почта подтверждена! Подтверждение телефона"))
+        self.setLayout(layout)
+
+    def request_code(self):
+        self.worker = ApiWorker("POST", f"{self.base_url}/auth/send-phone-code", json_data={"email":self.email})
+        self.worker.success.connect(self.on_code_received)
+        # self.worker.error.connect(lambda msg: QMessageBox.warning(self, "error", f"Не удалось получить код: {msg}"))
+        self.worker.error.connect(self.on_code_request_error)
+        self.worker.start()
+
+    def on_code_request_error(self, msg: str):
+        print(f"🔴 [send-phone-code] Ошибка: {msg}")
+        QMessageBox.warning(self, "Ошибка", f"Не удалось получить код: {msg}")
+
+    def on_code_received(self, data:dict):
+        print(f"🟢 [send-phone-code] Ответ: {data}")
+        code = data.get("verification_code")
+        if not code:
+            QMessageBox.warning(self, "Ошибка", "Код не получен")
+            return
+        self.worker = ApiWorker("POST", f"{self.base_url}/auth/verify-phone", json_data={"email":self.email, "code":code})
+        self.worker.success.connect(self.on_phone_verified_success)
+        self.worker.error.connect(lambda msg: QMessageBox.warning(self, "Error", f"Код неверный или истек:{msg}"))
+        self.worker.start()
+
+    def on_phone_verified_success(self):
+        print("Телефон подтврежден")
+        self.verification_complete.emit()
+        self.close()
 
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()
