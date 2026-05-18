@@ -13,18 +13,19 @@ class LoginDialog(QDialog, Ui_login):
         self.setupUi(self)
         self.base_url = base_url
         self.main_window = None
-        self.reg_btn.setText(None)
-        self.reg_btn = ClickableLabel('Зарегистрироваться')
-        self.reg_btn.setStyleSheet("color: #0078D4; text-decoration: underline;")#визуально отличимая
+
+        self.reg_btn.setText('<a href="register">Зарегистрироваться</a>')
+        self.reg_btn.setStyleSheet("""
+            QLabel { color: #1A1AFF; background: transparent; border: none; padding: 4px; }
+            QLabel:hover { color: #005A9E; text-decoration: underline; }
+            QLabel:pressed { color: #003F7F; }
+        """)
         self.reg_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        self.reg_btn.adjustSize()
-        self.reg_btn.move(143, 272)
-        self.reg_btn.setParent(self)
-
+        self.reg_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.reg_btn.setOpenExternalLinks(False)
 
         self.login_btn.clicked.connect(self.handle_login)
-        self.reg_btn.clicked.connect(self.show_register)
+        self.reg_btn.linkActivated.connect(lambda _: self.show_register())
         self.email_edit.returnPressed.connect(self.handle_login)
         self.password_edit.returnPressed.connect(self.handle_login)
 
@@ -133,16 +134,26 @@ class RegDialog(QDialog, Ui_reg):
         self.email_worker.verification_failed.connect(self.on_verification_failed)
         self.email_worker.start()
 
+    #перегрузка для того чтобы не было утечек
+    def reject(self):
+        if hasattr(self, "email_worker") and self.email_worker.isRunning():
+            self.email_worker.terminate()
+            self.email_worker.wait()
+        super().reject()
+
+    def CloseEvent(self, event):
+        self.reject()
+        super().closeEvent(event)
+
     def on_verification_failed(self, msg):
         QMessageBox.warning(self, "Error", msg)
         self.reject()
 
     def verify_phone(self):
-        self.hide()
         self.phone_window = PhoneVerificationWindow(self.base_url, self.email)
         self.phone_window.verification_complete.connect(self.on_phone_verified)
-        self.phone_window.show()
         self.phone_window.request_code()
+        self.phone_window.exec()
 
     def on_phone_verified(self):
         QMessageBox.information(self, "Success", "Пользователь зарегистрирован")
@@ -153,17 +164,15 @@ class RegDialog(QDialog, Ui_reg):
         self.enter_btn.setText("Зарегистрироваться")
         QMessageBox.warning(self, "Error registration", f"Не удалось зарегистрироваться{error_msg}")
 
-class PhoneVerificationWindow(QWidget):
+class PhoneVerificationWindow(QDialog):
     verification_complete = pyqtSignal()
-    def __init__(self, base_url: str, email: str):
-        super().__init__()
+    def __init__(self, base_url: str, email: str, parent = None):
+        super().__init__(parent)
         self.setWindowTitle("Верификация телефона")
         self.resize(300, 150)
         self.base_url = base_url
         self.email = email
         self.expected_code = None
-
-        self.setWindowFlag(self.windowFlags() | Qt.WindowType.Window)#обход модальной блокировки
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Почта подтверждена! Подтверждение телефона"))
